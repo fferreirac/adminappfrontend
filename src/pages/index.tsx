@@ -31,10 +31,11 @@ export default function Home() {
           <Button 
             colorScheme="green" 
             onClick={ ()=> {
-            axios.get(`${env.NEXT_PUBLIC_BACKEND_BASE_URL}/sales`, { withCredentials: true})
+            //axios.get(`${env.NEXT_PUBLIC_BACKEND_BASE_URL}/sales`, { withCredentials: true})
+            router.push('/clients/new');
           }}
           >
-          Get sales
+          Nuevo Cliente
           </Button>
 
           <Button 
