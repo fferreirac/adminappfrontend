@@ -1,5 +1,5 @@
 //import { NextPage } from "next"
-import { Button, Flex, FormControl, FormErrorMessage, FormLabel, Input, Select } from "@chakra-ui/react"
+import { Box, Button, ButtonGroup, Flex, FormControl, FormErrorMessage, FormLabel, Input, Select, Spinner } from "@chakra-ui/react"
 import { z } from 'zod'
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -7,6 +7,8 @@ import { DevTool } from "@hookform/devtools"
 import axios from "axios"
 import { env } from "~/env.mjs"
 import { useRouter } from "next/router"
+import isLoading from "@tanstack/react-query"
+
 
 const DOC_TYPES = ["RUC", "NIE", "Cédula", "Pasaporte", "CIF", "NIF", "DNI de Extrangero"] as const
 
@@ -21,7 +23,12 @@ const schema = z.object({
 
 export type Client = z.infer<typeof schema>
 
-const ClientForm = () => {
+interface Props {
+    clientId?: string
+}
+
+const ClientForm = ({ clientId }: Props) => {
+    //console.log({ clientId })
 
     const {
         register,
@@ -32,16 +39,37 @@ const ClientForm = () => {
         formState: { errors },
     } = useForm<Client>({
         resolver: zodResolver(schema),
+        defaultValues: async () => {
+            if (!clientId) return {}
+
+            const { data } = await axios.get(`${env.NEXT_PUBLIC_BACKEND_BASE_URL}/clients/${clientId}`, { withCredentials: true })
+            //console.log(data)
+            return data.data
+        },
     })
 
     const router = useRouter()
 
     const onSubmit = async (data: Client) => {
-        const res = await axios.post(`${env.NEXT_PUBLIC_BACKEND_BASE_URL}/clients`, data, { withCredentials: true }
+        const PARAMS = !!clientId ? `/${clientId}` : ""
+        const res = await axios(
+            `${env.NEXT_PUBLIC_BACKEND_BASE_URL}/clients${PARAMS}`,
+            {
+                method: !!clientId ? "PUT" : "POST",
+                data,
+                withCredentials: true
+            },
         )
         reset()
         router.push("/clients")
     }
+
+    if (isLoading) return (
+        <Flex height={10} alignItems={"center"} justifyContent={"center"}>
+            <Spinner alignSelf={"center"} colorScheme="red" />
+        </Flex>
+
+    )
 
     return (
         <>
@@ -96,7 +124,11 @@ const ClientForm = () => {
                         <FormErrorMessage>{errors.document_value?.message}</FormErrorMessage>
                     </FormControl>
                 </Flex>
-                <Button colorScheme={"purple"} type={"submit"}>Create</Button>
+                <ButtonGroup>
+                    <Button colorScheme={"purple"} type={"submit"}>{!!clientId ? "Guardar Cambios" : "Crear"}</Button>
+                    <Button colorScheme={"cyan"} onClick={() => router.back()}>Go Back</Button>
+                </ButtonGroup>
+
             </form>
             <DevTool control={control} />
         </>

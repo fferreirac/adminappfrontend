@@ -1,6 +1,7 @@
 import { Card, Flex, Text } from '@chakra-ui/react'
 import React from 'react'
 import { Client } from './ClientForm'
+import { useRouter } from 'next/router'
 //import { Client } from '~/pages/clients/new'
 
 interface ClientFromDB extends Client {
@@ -13,6 +14,7 @@ interface Props {
 }
 
 const ClientsList = ({ clients }: Props) => {
+    const router = useRouter();
     return (
         <Flex flexDirection={"column"} gap={2}>
             {clients.map(c => (
@@ -27,12 +29,15 @@ const ClientsList = ({ clients }: Props) => {
                         color: "#222",
                         transition: ".5s background-color ease-out"
                     }}
+                    onClick={() => router.push(`/clients/${c._id}`)}
                 >
                     <Text>{c.firstname}</Text>
                 </Card>
             ))}
         </Flex>
+
     )
+
 }
 
 export default ClientsList
