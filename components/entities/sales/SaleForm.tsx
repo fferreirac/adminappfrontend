@@ -1,5 +1,5 @@
-//import { NextPage } from "next"
-import { Button, ButtonGroup, Flex, FormControl, FormErrorMessage, FormLabel, Input, Select, Spinner } from "@chakra-ui/react"
+import { DeleteIcon, SearchIcon } from "@chakra-ui/icons"
+import { Button, ButtonGroup, Flex, FormControl, FormErrorMessage, FormLabel, IconButton, Input, Select, Spinner } from "@chakra-ui/react"
 import { z } from 'zod'
 import { useFieldArray, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -27,8 +27,8 @@ const saleProductSchema = z.object({
     code: z.string(),
     name: z.string(),
     qty: z.number(),
-    unit_price: z.number(),
-    discount: z.number(),
+    unit_price: z.number().optional(),
+    discount: z.number().optional(),
     total: z.number()
 })
 
@@ -37,7 +37,6 @@ const salePaymentMethodSchema = z.object({
     amount: z.number(),
     time_unit: TIME_UNITS,
     time_value: z.number(),
-    //unit_price: z.number()
 })
 
 // centralizar las validaciones con zod
@@ -52,6 +51,7 @@ const saleSchema = z.object({
 
 export type Sale = z.infer<typeof saleSchema>
 type PaymentMethod = z.infer<typeof salePaymentMethodSchema>
+type Product = z.infer<typeof saleProductSchema>
 
 
 interface Props {
@@ -60,9 +60,16 @@ interface Props {
 
 const defaultPM: PaymentMethod = {
     method: "Tarjeta de débito",
-    amount: 5000,
-    time_unit: "Días",
+    amount: 0,
+    time_unit: "Meses",
     time_value: 0,
+}
+
+const defaultProduct: Product = {
+    code: "",
+    name: "",
+    qty: 0,
+    total: 0
 }
 
 const SaleForm = ({ saletId }: Props) => {
@@ -72,21 +79,31 @@ const SaleForm = ({ saletId }: Props) => {
         control,
         reset,
         setValue,
+        getValues,
         handleSubmit,
         formState: { errors, isLoading },
     } = useForm<Sale>({
         resolver: zodResolver(saleSchema),
         defaultValues: async () => {
-            if (!saletId) return { payment_methods: [defaultPM] }
+            if (!saletId) return {
+                payment_methods: [defaultPM],
+                products: [defaultProduct]
+            }
 
             const { data } = await axios.get(`${env.NEXT_PUBLIC_BACKEND_BASE_URL}/sales/${saletId}`, { withCredentials: true })
             return data.data
         },
     })
 
-    const { fields, append, remove, move, insert, swap, prepend } = useFieldArray({
+    const { fields, append, remove } = useFieldArray({
         control,
         name: "payment_methods"
+    })
+
+    //lo mismo de antes pero renombrado para evitar colision
+    const { fields: products, append: addProduct, remove: removeProduct } = useFieldArray({
+        control,
+        name: "products"
     })
 
     //console.log({ fields })
@@ -136,8 +153,69 @@ const SaleForm = ({ saletId }: Props) => {
                         onChange={(date: Date) => setValue("operation_date", date)} />
                     <FormErrorMessage>{errors.operation_date?.message}</FormErrorMessage>
                 </FormControl>
+
                 <Flex flexDir={"column"} mb={4}>
-                    {fields.map((field, index) => (<Flex gap={3}>
+                    {products.map((field, index) => (<Flex gap={3} alignItems={"flex-end"} mb={5}>
+                        <IconButton disabled={!field.code} aria-label="Search database" icon={<SearchIcon />} onClick={async () => {
+                            const code = getValues(`products.${index}.code`);
+                            console.log({ code })
+                            if (!code) return
+
+                            const { data } = await axios.get(
+                                `${env.NEXT_PUBLIC_BACKEND_BASE_URL}/products/${code}`,
+                                { withCredentials: true })
+                            const product: Product = data.data;
+                            if (!!product) {
+                                setValue(`products.${index}`, {
+                                    code: code,
+                                    name: product.name,
+                                    qty: 0,
+                                    total: 0
+                                })
+                            } else {
+                                console.log("No existe producto con ese código")
+                                setValue(`products.${index}`, {
+                                    code: code,
+                                    name: "product no existe",
+                                    qty: 0,
+                                    total: 0
+                                })
+                            }
+                        }} />
+                        <FormControl flex={2}>
+                            <FormLabel>Código</FormLabel>
+                            <Input
+                                type="text"
+                                placeholder="Código"
+                                {...register(`products.${index}.code`)}
+                            />
+                        </FormControl>
+
+                        <FormControl flex={5}>
+                            <FormLabel>Denominación</FormLabel>
+                            <Input
+                                type="text"
+                                placeholder="Denominación"
+                                {...register(`products.${index}.name`)}
+                                disabled
+                            />
+                        </FormControl>
+
+                        <FormControl flex={1}>
+                            <Flex alignItems={"center"} justifyContent={"space-between"}>
+                                <FormLabel>Cantidad</FormLabel>
+                                {index > 0 && (<DeleteIcon onClick={() => removeProduct(index)} color="red.500" _hover={{ color: "red.700" }} cursor={"pointer"} />)}
+                            </Flex>
+                            <Input type="number" {...register(`products.${index}.qty`)} />
+                        </FormControl>
+
+                    </Flex>))}
+                    <Button onClick={() => addProduct(defaultProduct)}>Nuevo Producto</Button>
+                </Flex>
+
+
+                <Flex flexDir={"column"} mb={4}>
+                    {fields.map((field, index) => (<Flex gap={3} alignItems={"flex-end"} mb={5}>
                         <FormControl flex={7}>
                             <FormLabel>Método</FormLabel>
                             <Select
@@ -150,7 +228,7 @@ const SaleForm = ({ saletId }: Props) => {
                             </Select>
                         </FormControl>
 
-                        <FormControl flex={4} mb={5} isInvalid={!!errors?.payment_methods}>
+                        <FormControl flex={4} isInvalid={!!errors?.payment_methods}>
                             <FormLabel>Importe</FormLabel>
                             <Input
                                 type='text'
@@ -160,7 +238,7 @@ const SaleForm = ({ saletId }: Props) => {
                             {/* <FormErrorMessage>{errors.document_value?.message}</FormErrorMessage> */}
                         </FormControl>
 
-                        <FormControl flex={2} mb={5} isInvalid={!!errors?.payment_methods}>
+                        <FormControl flex={2} isInvalid={!!errors?.payment_methods}>
                             <FormLabel>Plazo</FormLabel>
                             <Input
                                 type='number'
@@ -171,7 +249,10 @@ const SaleForm = ({ saletId }: Props) => {
                         </FormControl>
 
                         <FormControl flex={4}>
-                            <FormLabel>Período</FormLabel>
+                            <Flex alignItems={"center"} justifyContent={"space-between"} mb={2}>
+                                <FormLabel>Período</FormLabel>
+                                {index > 0 && (<DeleteIcon onClick={() => remove(index)} color="red.500" _hover={{ color: "red.700" }} cursor={"pointer"} />)}
+                            </Flex>
                             <Select placeholder="Seleccionar"
                                 {...register(`payment_methods.${index}.time_unit`)}
                             >
