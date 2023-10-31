@@ -1,5 +1,5 @@
 import { DeleteIcon, SearchIcon } from "@chakra-ui/icons"
-import { Button, ButtonGroup, Flex, FormControl, FormErrorMessage, FormLabel, IconButton, Input, Select, Spinner } from "@chakra-ui/react"
+import { Button, ButtonGroup, Divider, Flex, FormControl, FormErrorMessage, FormLabel, Heading, IconButton, Input, Select, Spinner } from "@chakra-ui/react"
 import { z } from 'zod'
 import { useFieldArray, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -8,7 +8,6 @@ import axios from "axios"
 import { env } from "~/env.mjs"
 import { useRouter } from "next/router"
 import { useState } from "react"
-import DatePicker from "react-datepicker"
 import "react-datepicker/dist/react-datepicker.css"
 
 
@@ -51,7 +50,15 @@ const saleSchema = z.object({
 
 export type Sale = z.infer<typeof saleSchema>
 type PaymentMethod = z.infer<typeof salePaymentMethodSchema>
-type Product = z.infer<typeof saleProductSchema>
+type ProductForState = z.infer<typeof saleProductSchema>
+
+interface Product extends ProductForState {
+    supplier_cost: number
+    micro: number
+    iva: number
+    salvament_margin: number
+    profit_margin: number
+}
 
 
 interface Props {
@@ -65,10 +72,10 @@ const defaultPM: PaymentMethod = {
     time_value: 0,
 }
 
-const defaultProduct: Product = {
+const defaultProduct: ProductForState = {
     code: "",
     name: "",
-    qty: 0,
+    qty: 1,
     total: 0
 }
 
@@ -134,90 +141,158 @@ const SaleForm = ({ saletId }: Props) => {
     return (
         <>
             <form onSubmit={handleSubmit(onSubmit)}>
-
+                {/* datos basicos */}
                 <FormControl mb={5} isInvalid={!!errors.client_document}>
                     <FormLabel>Documento del Cliente</FormLabel>
-                    <Input
-                        type='text'
-                        placeholder="nombre"
-                        {...register("client_document")}
-                    />
+
+
+                    <Flex gap={1}>
+                        <IconButton
+                            aria-label="Search database"
+                            icon={<SearchIcon />}
+                            onClick={async () => {
+                                const document = getValues('client_document');
+                                if (!document) return
+
+                                const { data } = await axios.get(
+                                    `${env.NEXT_PUBLIC_BACKEND_BASE_URL}/client/${document}`,
+                                    { withCredentials: true }
+                                )
+                                setValue(`client`, data.data._id);
+
+                            }}
+                        />
+                        <Input
+                            type='text'
+                            placeholder="documento"
+                            {...register("client_document")}
+                        />
+                    </Flex>
+
                     <FormErrorMessage>{errors.client_document?.message}</FormErrorMessage>
                 </FormControl>
 
-                <FormControl mb={5} isInvalid={!!errors.operation_date}>
+                <FormControl mb={5} isInvalid={!!errors.operation_date} >
                     <FormLabel>Fecha de la Operación</FormLabel>
-                    <DatePicker
+                    <Input type="date" {...register("operation_date")} />
+                    {/* <DatePicker
                         selected={startDate}
                         ref={register("operation_date").ref}
-                        onChange={(date: Date) => setValue("operation_date", date)} />
+                        onChange={(date: Date) => setValue("operation_date", date)} /> */}
                     <FormErrorMessage>{errors.operation_date?.message}</FormErrorMessage>
+
                 </FormControl>
 
-                <Flex flexDir={"column"} mb={4}>
-                    {products.map((field, index) => (<Flex gap={3} alignItems={"flex-end"} mb={5}>
-                        <IconButton disabled={!field.code} aria-label="Search database" icon={<SearchIcon />} onClick={async () => {
-                            const code = getValues(`products.${index}.code`);
-                            console.log({ code })
-                            if (!code) return
-
-                            const { data } = await axios.get(
-                                `${env.NEXT_PUBLIC_BACKEND_BASE_URL}/products/${code}`,
-                                { withCredentials: true })
-                            const product: Product = data.data;
-                            if (!!product) {
-                                setValue(`products.${index}`, {
-                                    code: code,
-                                    name: product.name,
-                                    qty: 0,
-                                    total: 0
-                                })
-                            } else {
-                                console.log("No existe producto con ese código")
-                                setValue(`products.${index}`, {
-                                    code: code,
-                                    name: "product no existe",
-                                    qty: 0,
-                                    total: 0
-                                })
-                            }
-                        }} />
-                        <FormControl flex={2}>
-                            <FormLabel>Código</FormLabel>
-                            <Input
-                                type="text"
-                                placeholder="Código"
-                                {...register(`products.${index}.code`)}
-                            />
-                        </FormControl>
-
-                        <FormControl flex={5}>
-                            <FormLabel>Denominación</FormLabel>
-                            <Input
-                                type="text"
-                                placeholder="Denominación"
-                                {...register(`products.${index}.name`)}
-                                disabled
-                            />
-                        </FormControl>
-
-                        <FormControl flex={1}>
-                            <Flex alignItems={"center"} justifyContent={"space-between"}>
-                                <FormLabel>Cantidad</FormLabel>
-                                {index > 0 && (<DeleteIcon onClick={() => removeProduct(index)} color="red.500" _hover={{ color: "red.700" }} cursor={"pointer"} />)}
-                            </Flex>
-                            <Input type="number" {...register(`products.${index}.qty`)} />
-                        </FormControl>
-
-                    </Flex>))}
-                    <Button onClick={() => addProduct(defaultProduct)}>Nuevo Producto</Button>
+                {/* PRODUCTOS */}
+                <Flex alignItems={"center"} justifyContent={"space-between"} mt={8}>
+                    <Heading size={"lg"}>Productos</Heading>
+                    <Button
+                        size={"xs"}
+                        fontSize={"1rem"}
+                        lineHeight={"1rem"}
+                        py={4}
+                        colorScheme="blue"
+                        onClick={() => addProduct(defaultProduct)}
+                    >
+                        Agregar
+                    </Button>
                 </Flex>
 
+                <Divider mb="3" mt={"2"} />
+
+                <Flex flexDir={"column"} mb={4} >
+                    {products.map((field, index) => (
+                        <Flex gap={3} alignItems={"flex-end"} mb={5}>
+                            <IconButton
+                                aria-label="Search database"
+                                icon={<SearchIcon />}
+                                onClick={async () => {
+                                    const code = getValues(`products.${index}.code`);
+                                    //console.log({ code })
+                                    if (!code) return
+
+                                    const { data } = await axios.get(
+                                        `${env.NEXT_PUBLIC_BACKEND_BASE_URL}/products/${code}`,
+                                        { withCredentials: true }
+                                    )
+                                    const product: Product = data.data;
+                                    if (!!product) {
+                                        const { supplier_cost, micro, iva, profit_margin, salvament_margin } = product
+                                        setValue(`products.${index}`, {
+                                            code: code,
+                                            name: product.name,
+                                            qty: 1,
+                                            total: supplier_cost as number
+                                        })
+
+                                        /* calculos de factura  */
+                                        const ivaAmount = iva * supplier_cost
+                                        const baseCost = micro + supplier_cost
+                                        const minimunCost = baseCost / (1 - salvament_margin)
+                                        const finalPrice = +(minimunCost / (1 - profit_margin)).toFixed(3)
+                                        console.log({ finalPrice })
+                                    } else {
+                                        console.log("No existe producto con ese código")
+                                        setValue(`products.${index}`, {
+                                            code: code,
+                                            name: "product no existe",
+                                            qty: 0,
+                                            total: 0
+                                        })
+                                    }
+                                }}
+                            />
+                            <FormControl flex={2}>
+                                {index === 0 && <FormLabel>Código</FormLabel>}
+                                <Input
+                                    type="text"
+                                    placeholder="Código"
+                                    {...register(`products.${index}.code`)}
+                                />
+                            </FormControl>
+
+                            <FormControl flex={6}>
+                                {index === 0 && <FormLabel>Denominación</FormLabel>}
+                                <Input
+                                    type="text"
+                                    placeholder="Denominación"
+                                    {...register(`products.${index}.name`)}
+                                    disabled
+                                />
+                            </FormControl>
+
+                            <FormControl flex={2}>
+                                <Flex alignItems={"center"} justifyContent={"space-between"}>
+                                    {index === 0 && <FormLabel>Cantidad</FormLabel>}
+                                    <Input type="number" {...register(`products.${index}.qty`)} />
+                                    {index > 0 && (<DeleteIcon onClick={() => removeProduct(index)} color="red.500" _hover={{ color: "red.700" }} cursor={"pointer"} ml={2} />)}
+                                </Flex>
+                            </FormControl>
+                        </Flex>))}
+                </Flex>
+
+                {/* SALE */}
+                <Flex alignItems={"center"} justifyContent={"space-between"} mt={8}>
+                    <Heading size={"lg"}>Forma de Pago</Heading>
+                    <Button
+                        size={"xs"}
+                        fontSize={"1rem"}
+                        lineHeight={"1rem"}
+                        py={4}
+                        colorScheme="blue"
+                        onClick={() => append(defaultPM)}
+                    >
+                        Agregar
+                    </Button>
+                </Flex>
+
+                <Divider mb="3" mt={"2"} />
 
                 <Flex flexDir={"column"} mb={4}>
+
                     {fields.map((field, index) => (<Flex gap={3} alignItems={"flex-end"} mb={5}>
                         <FormControl flex={7}>
-                            <FormLabel>Método</FormLabel>
+                            {index === 0 && <FormLabel>Método</FormLabel>}
                             <Select
                                 placeholder="Seleccionar"
                                 {...register(`payment_methods.${index}.method`)}
@@ -229,40 +304,39 @@ const SaleForm = ({ saletId }: Props) => {
                         </FormControl>
 
                         <FormControl flex={4} isInvalid={!!errors?.payment_methods}>
-                            <FormLabel>Importe</FormLabel>
+                            {index === 0 && <FormLabel>Importe</FormLabel>}
                             <Input
                                 type='text'
                                 placeholder='0'
                                 {...register(`payment_methods.${index}.amount`)}
                             />
-                            {/* <FormErrorMessage>{errors.document_value?.message}</FormErrorMessage> */}
                         </FormControl>
 
                         <FormControl flex={2} isInvalid={!!errors?.payment_methods}>
-                            <FormLabel>Plazo</FormLabel>
+                            {index === 0 && <FormLabel>Plazo</FormLabel>}
                             <Input
                                 type='number'
                                 placeholder="Plazo"
                                 {...register(`payment_methods.${index}.time_value`)}
                             />
-                            {/* <FormErrorMessage>{errors.document_value?.message}</FormErrorMessage> */}
                         </FormControl>
 
                         <FormControl flex={4}>
-                            <Flex alignItems={"center"} justifyContent={"space-between"} mb={2}>
-                                <FormLabel>Período</FormLabel>
-                                {index > 0 && (<DeleteIcon onClick={() => remove(index)} color="red.500" _hover={{ color: "red.700" }} cursor={"pointer"} />)}
+                            <Flex alignItems={"center"} justifyContent={"space-between"} >
+                                {index === 0 && <FormLabel>Período</FormLabel>}
+
+                                <Select placeholder="Seleccionar"
+                                    {...register(`payment_methods.${index}.time_unit`)}
+                                >
+                                    {Object.keys(TIME_UNITS.Enum).map((unit) => (
+                                        <option key={unit} value={unit}>{unit}</option>
+                                    ))}
+                                </Select>
+                                {index > 0 && (<DeleteIcon onClick={() => remove(index)} color="red.500" _hover={{ color: "red.700" }} cursor={"pointer"} ml={2} />)}
+
                             </Flex>
-                            <Select placeholder="Seleccionar"
-                                {...register(`payment_methods.${index}.time_unit`)}
-                            >
-                                {Object.keys(TIME_UNITS.Enum).map((unit) => (
-                                    <option key={unit} value={unit}>{unit}</option>
-                                ))}
-                            </Select>
                         </FormControl>
                     </Flex>))}
-                    <Button onClick={() => append(defaultPM)}>Nuevo Método</Button>
                 </Flex>
                 <ButtonGroup>
                     <Button colorScheme={"purple"} type={"submit"}>{!!saletId ? "Guardar Cambios" : "Crear"}</Button>
